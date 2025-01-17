@@ -1,0 +1,151 @@
+import cv2
+import tf_keras as keras
+import numpy as np
+import speech_recognition as sr
+from transformers import pipeline
+import re
+import time
+
+# Pre-Trained Models for Video Classification
+model = keras.applications.MobileNetV2(weights="imagenet")
+
+# NLP Model for Objectionable Language Detection
+nlp = pipeline("text-classification", model="bhadresh-savani/bert-base-uncased-emotion", return_all_scores=True)
+
+# Define Default Objectionable Words or Phrases
+DEFAULT_OBJECTIONABLE_WORDS = ["swearword1", "swearword2", "violent phrase", "suggestive phrase"]
+
+def get_user_preferences():
+    """Allow users to define their preferences for filtering."""
+    print("Welcome to the Content Filtering System Configuration.")
+    print("Choose your preferred filtering options:")
+
+    print("1. Filtering Modes:")
+    print("   a. Skip (Fast-forward objectionable content)")
+    print("   b. Mute (Mute objectionable audio)")
+    print("   c. Log Only (Log content but take no action)")
+    mode = input("Select mode (a/b/c): ").strip().lower()
+
+    print("\n2. Add Custom Objectionable Words (comma-separated):")
+    custom_words = input("Enter words (leave blank for default): ").strip()
+
+    # Validate and store user preferences
+    filtering_mode = mode if mode in ['a', 'b', 'c'] else 'a'
+    objectionable_words = (
+        DEFAULT_OBJECTIONABLE_WORDS + [word.strip() for word in custom_words.split(',')] if custom_words else DEFAULT_OBJECTIONABLE_WORDS
+    )
+
+    return {
+        "mode": filtering_mode,
+        "words": objectionable_words
+    }
+
+# Initialize user preferences
+USER_PREFERENCES = get_user_preferences()
+OBJECTIONABLE_WORDS = USER_PREFERENCES["words"]
+
+# Frame Processing
+
+def preprocess_frame(frame):
+    """Preprocess the frame for AI model prediction."""
+    frame = cv2.resize(frame, (224, 224))
+    frame = keras.applications.mobilenet_v2.preprocess_input(frame)
+    return np.expand_dims(frame, axis=0)
+
+def classify_frame(frame):
+    """Classify a single frame and return detected labels."""
+    processed_frame = preprocess_frame(frame)
+    predictions = model.predict(processed_frame)
+    decoded_predictions = keras.applications.mobilenet_v2.decode_predictions(predictions, top=3)
+    return decoded_predictions
+
+# Audio and Subtitle Processing
+
+def transcribe_audio(audio_file):
+    recognizer = sr.Recognizer()
+    with sr.AudioFile(audio_file) as source:
+        audio = recognizer.record(source)
+    try:
+        return recognizer.recognize_google(audio)
+    except sr.UnknownValueError:
+        return ""
+    except sr.RequestError as e:
+        print(f"Could not request results from Google Speech Recognition service; {e}")
+        return ""
+
+def detect_objectionable_content(transcript):
+    detected = []
+    for word in OBJECTIONABLE_WORDS:
+        if re.search(rf"\b{word}\b", transcript, re.IGNORECASE):
+            detected.append(word)
+
+    if not detected:
+        nlp_results = nlp(transcript)
+        for result in nlp_results[0]:
+            if result['label'] in ["anger", "disgust"] and result['score'] > 0.8:
+                detected.append(result['label'])
+    return detected
+
+# Sequential Processing
+
+def process_video_sequentially(video_path, audio_path, subtitles_path):
+    """Process video, audio, and subtitles sequentially for simplicity."""
+    cap = cv2.VideoCapture(video_path)
+    fps = int(cap.get(cv2.CAP_PROP_FPS))
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    out = cv2.VideoWriter("sequential_output.mp4", fourcc, fps, (width, height))
+
+    # Process audio and subtitles
+    transcript = transcribe_audio(audio_path)
+    audio_detections = detect_objectionable_content(transcript)
+
+    with open(subtitles_path, "r") as subtitle_file:
+        subtitles = subtitle_file.read()
+        subtitle_detections = detect_objectionable_content(subtitles)
+
+    print("Audio Detections:", audio_detections)
+    print("Subtitle Detections:", subtitle_detections)
+
+    start_time = time.time()
+
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        # Classify frame
+        predictions = classify_frame(frame)
+        labels = [label[1] for label in predictions[0]]
+
+        action_needed = False
+        if "nude" in labels or "violence" in labels or audio_detections or subtitle_detections:
+            action_needed = True
+
+        if action_needed:
+            if USER_PREFERENCES["mode"] == 'a':
+                print("Skipping objectionable scene.")
+                continue
+            elif USER_PREFERENCES["mode"] == 'b':
+                print("Muting objectionable content.")
+
+        out.write(frame)
+        cv2.imshow("Processed Video", frame)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    out.release()
+    cv2.destroyAllWindows()
+
+    end_time = time.time()
+    print(f"Processing complete in {end_time - start_time:.2f} seconds.")
+
+# Example Usage
+video_path = "input_video.mp4"
+audio_path = "input_audio.wav"
+subtitles_path = "input_subtitles.srt"
+process_video_sequentially(video_path, audio_path, subtitles_path)

@@ -15,17 +15,17 @@ import argparse
 try:
     from pytube import YouTube, Playlist
 except ImportError:
-    raise ImportError("The 'pytube' library is required. Install it using `pip install pytube`.")
+    print("The 'pytube' library is required. Please install it using `pip install pytube`.")
 
 try:
     from streamlink import Streamlink
 except ImportError:
-    raise ImportError("The 'streamlink' library is required. Install it using `pip install streamlink`.")
+    print("The 'streamlink' library is required. Please install it using `pip install streamlink`.")
 
 try:
     import pyautogui
 except ImportError:
-    raise ImportError("The 'pyautogui' library is required. Install it using `pip install pyautogui`.")
+    print("The 'pyautogui' library is required. Please install it using `pip install pyautogui`.")
 
 # Pre-Trained Models for Video Classification
 model = keras.applications.MobileNetV2(weights="imagenet")
@@ -129,17 +129,17 @@ class ContentFilterApp:
         self.load_preferences()
 
     def browse_video(self):
-        path = filedialog.askopenfilename(filetypes=[("Video Files", "*.mp4;*.avi;*.mkv")])
+        path = filedialog.askopenfilename(filetypes=[["Video Files", "*.mp4;*.avi;*.mkv"]])
         if path:
             self.video_path.set(path)
 
     def browse_audio(self):
-        path = filedialog.askopenfilename(filetypes=[("Audio Files", "*.wav")])
+        path = filedialog.askopenfilename(filetypes=[["Audio Files", "*.wav"]])
         if path:
             self.audio_path.set(path)
 
     def browse_subtitles(self):
-        path = filedialog.askopenfilename(filetypes=[("Subtitle Files", "*.srt")])
+        path = filedialog.askopenfilename(filetypes=[["Subtitle Files", "*.srt"]])
         if path:
             self.subtitles_path.set(path)
 
@@ -184,4 +184,16 @@ class ContentFilterApp:
             self.filter_mode.set(preferences.get("filter_mode", "a"))
             for cat, value in preferences.get("categories", {}).items():
                 if cat in self.category_vars:
-                    self.category_vars
+                    self.category_vars[cat].set(value)
+
+def main():
+    if os.environ.get("DISPLAY"):
+        root = tk.Tk()
+        app = ContentFilterApp(root)
+        root.mainloop()
+    else:
+        print("No graphical environment detected. Running in CLI mode.")
+        cli_mode()
+
+if __name__ == "__main__":
+    main()

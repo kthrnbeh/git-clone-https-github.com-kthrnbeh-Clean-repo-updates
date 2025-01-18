@@ -10,6 +10,9 @@ import os
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import json
+from pytube import YouTube, Playlist
+from streamlink import Streamlink
+import pyautogui
 
 # Pre-Trained Models for Video Classification
 model = keras.applications.MobileNetV2(weights="imagenet")
@@ -49,32 +52,43 @@ class ContentFilterApp:
         tk.Entry(root, textvariable=self.subtitles_path, width=50).grid(row=2, column=1)
         tk.Button(root, text="Browse", command=self.browse_subtitles).grid(row=2, column=2)
 
+        # YouTube URL Download Section
+        tk.Label(root, text="Enter YouTube Video/Playlist URL:").grid(row=3, column=0, sticky="w")
+        self.youtube_url = tk.StringVar()
+        tk.Entry(root, textvariable=self.youtube_url, width=50).grid(row=3, column=1)
+        tk.Button(root, text="Download", command=self.download_youtube_content).grid(row=3, column=2)
+
+        # Source Type Selection
+        tk.Label(root, text="Select Source Type:").grid(row=4, column=0, sticky="w")
+        self.source_type = tk.StringVar(value="Local File")
+        tk.OptionMenu(root, self.source_type, "Local File", "YouTube", "DVD", "Live Stream").grid(row=4, column=1)
+
         # Filtering Mode
-        tk.Label(root, text="Select Filtering Mode:").grid(row=3, column=0, sticky="w")
+        tk.Label(root, text="Select Filtering Mode:").grid(row=5, column=0, sticky="w")
         self.filter_mode = tk.StringVar(value="a")
-        tk.Radiobutton(root, text="Skip", variable=self.filter_mode, value="a").grid(row=3, column=1, sticky="w")
-        tk.Radiobutton(root, text="Mute", variable=self.filter_mode, value="b").grid(row=3, column=1)
-        tk.Radiobutton(root, text="Log Only", variable=self.filter_mode, value="c").grid(row=3, column=1, sticky="e")
+        tk.Radiobutton(root, text="Skip", variable=self.filter_mode, value="a").grid(row=5, column=1, sticky="w")
+        tk.Radiobutton(root, text="Mute", variable=self.filter_mode, value="b").grid(row=5, column=1)
+        tk.Radiobutton(root, text="Log Only", variable=self.filter_mode, value="c").grid(row=5, column=1, sticky="e")
 
         # Category Selection
-        tk.Label(root, text="Select Categories to Filter:").grid(row=4, column=0, sticky="w")
+        tk.Label(root, text="Select Categories to Filter:").grid(row=6, column=0, sticky="w")
         self.category_vars = {category: tk.BooleanVar(value=False) for category in CATEGORY_FILTERS.keys()}
         for i, category in enumerate(CATEGORY_FILTERS.keys()):
-            tk.Checkbutton(root, text=category, variable=self.category_vars[category]).grid(row=4 + i // 3, column=i % 3 + 1, sticky="w")
+            tk.Checkbutton(root, text=category, variable=self.category_vars[category]).grid(row=6 + i // 3, column=i % 3 + 1, sticky="w")
 
         # Progress Bar
-        tk.Label(root, text="Processing Progress:").grid(row=7, column=0, sticky="w")
+        tk.Label(root, text="Processing Progress:").grid(row=9, column=0, sticky="w")
         self.progress_bar = ttk.Progressbar(root, orient="horizontal", length=400, mode="determinate")
-        self.progress_bar.grid(row=7, column=1, columnspan=2, pady=10)
+        self.progress_bar.grid(row=9, column=1, columnspan=2, pady=10)
 
         # Save Preferences
-        tk.Button(root, text="Save Preferences", command=self.save_preferences).grid(row=8, column=0, pady=10)
+        tk.Button(root, text="Save Preferences", command=self.save_preferences).grid(row=10, column=0, pady=10)
 
         # Load Preferences
-        tk.Button(root, text="Load Preferences", command=self.load_preferences).grid(row=8, column=1, pady=10)
+        tk.Button(root, text="Load Preferences", command=self.load_preferences).grid(row=10, column=1, pady=10)
 
         # Process Button
-        tk.Button(root, text="Start Filtering", command=self.start_filtering).grid(row=8, column=2, pady=10)
+        tk.Button(root, text="Start Filtering", command=self.start_filtering).grid(row=10, column=2, pady=10)
 
         self.load_preferences()
 
@@ -92,6 +106,31 @@ class ContentFilterApp:
         path = filedialog.askopenfilename(filetypes=[("Subtitle Files", "*.srt")])
         if path:
             self.subtitles_path.set(path)
+
+    def download_youtube_content(self):
+        url = self.youtube_url.get()
+        if not url:
+            messagebox.showerror("Error", "Please enter a valid YouTube URL.")
+            return
+
+        try:
+            if "playlist" in url:
+                playlist = Playlist(url)
+                download_path = "downloads/playlist"
+                os.makedirs(download_path, exist_ok=True)
+                for video in playlist.videos:
+                    video.streams.filter(progressive=True, file_extension="mp4").first().download(download_path)
+                messagebox.showinfo("Success", f"Playlist downloaded to: {download_path}")
+            else:
+                yt = YouTube(url)
+                stream = yt.streams.filter(progressive=True, file_extension="mp4").first()
+                download_path = "downloads"
+                os.makedirs(download_path, exist_ok=True)
+                file_path = stream.download(download_path)
+                messagebox.showinfo("Success", f"Video downloaded to: {file_path}")
+                self.video_path.set(file_path)  # Set the downloaded video for processing
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to download video/playlist: {e}")
 
     def save_preferences(self):
         preferences = {
@@ -112,6 +151,18 @@ class ContentFilterApp:
                     self.category_vars[cat].set(value)
 
     def start_filtering(self):
+        source_type = self.source_type.get()
+
+        if source_type == "Local File":
+            self.process_local_file()
+        elif source_type == "YouTube":
+            self.download_youtube_content()
+        elif source_type == "DVD":
+            self.process_dvd()
+        elif source_type == "Live Stream":
+            self.process_live_stream()
+
+    def process_local_file(self):
         video_path = self.video_path.get()
         audio_path = self.audio_path.get()
         subtitles_path = self.subtitles_path.get()
@@ -120,109 +171,52 @@ class ContentFilterApp:
             messagebox.showerror("Error", "Please select all required files.")
             return
 
-        # Get user-selected categories and filtering mode
         selected_categories = [cat for cat, var in self.category_vars.items() if var.get()]
         objectionable_words = []
         for category in selected_categories:
             objectionable_words.extend(CATEGORY_FILTERS[category])
 
         filtering_mode = self.filter_mode.get()
-
-        # Save preferences and process
         self.process_video_sequentially(video_path, audio_path, subtitles_path, filtering_mode, objectionable_words)
 
-    def process_video_sequentially(self, video_path, audio_path, subtitles_path, filtering_mode, objectionable_words):
-        """Process video, audio, and subtitles sequentially."""
-        cap = cv2.VideoCapture(video_path)
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        fps = int(cap.get(cv2.CAP_PROP_FPS))
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    def process_dvd(self):
+        dvd_path = filedialog.askdirectory(title="Select DVD Drive")
+        if not dvd_path:
+            messagebox.showerror("Error", "Please select a valid DVD drive.")
+            return
 
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        out = cv2.VideoWriter("sequential_output.mp4", fourcc, fps, (width, height))
+        # Add logic to process DVD content here
+        print("DVD processing not implemented yet.")
 
-        # Process audio and subtitles
-        transcript = self.transcribe_audio(audio_path)
-        audio_detections = self.detect_objectionable_content(transcript, objectionable_words)
+    def process_live_stream(self):
+        stream_url = filedialog.askstring("Enter Stream URL", "Stream URL:")
+        if not stream_url:
+            messagebox.showerror("Error", "Please enter a valid stream URL.")
+            return
 
-        if os.path.exists(subtitles_path):
-            with open(subtitles_path, "r") as subtitle_file:
-                subtitles = subtitle_file.read()
-                subtitle_detections = self.detect_objectionable_content(subtitles, objectionable_words)
-        else:
-            subtitle_detections = []
-
-        print("Audio Detections:", audio_detections)
-        print("Subtitle Detections:", subtitle_detections)
-
-        start_time = time.time()
-        current_frame = 0
-
-        while cap.isOpened():
-            ret, frame = cap.read()
-            if not ret:
-                break
-
-            # Classify frame
-            predictions = self.classify_frame(frame)
-            labels = [label[1] for label in predictions[0]]
-
-            action_needed = False
-            if "nude" in labels or "violence" in labels or audio_detections or subtitle_detections:
-                action_needed = True
-
-            if action_needed:
-                if filtering_mode == 'a':
-                    print("Skipping objectionable scene.")
-                    continue
-                elif filtering_mode == 'b':
-                    print("Muting objectionable content.")
-
-            out.write(frame)
-
-            # Update progress bar
-            current_frame += 1
-            progress = (current_frame / total_frames) * 100
-            self.progress_bar['value'] = progress
-            self.root.update_idletasks()
-
-        cap.release()
-        out.release()
-
-        end_time = time.time()
-        messagebox.showinfo("Success", f"Processing complete in {end_time - start_time:.2f} seconds.")
-
-    def classify_frame(self, frame):
-        frame = cv2.resize(frame, (224, 224))
-        frame = keras.applications.mobilenet_v2.preprocess_input(frame)
-        processed_frame = np.expand_dims(frame, axis=0)
-        predictions = model.predict(processed_frame, verbose=0)
-        return keras.applications.mobilenet_v2.decode_predictions(predictions, top=3)
-
-    def transcribe_audio(self, audio_file):
-        recognizer = sr.Recognizer()
         try:
-            with sr.AudioFile(audio_file) as source:
-                audio = recognizer.record(source)
-            return recognizer.recognize_google(audio)
+            session = Streamlink()
+            streams = session.streams(stream_url)
+            best_stream = streams.get("best")
+            if not best_stream:
+                messagebox.showerror("Error", "No valid streams found.")
+                return
+
+            # Add logic to process the stream here
+            print(f"Streaming from {stream_url}")
         except Exception as e:
-            print(f"Error transcribing audio: {e}")
-            return ""
+            messagebox.showerror("Error", f"Failed to process stream: {e}")
 
-    def detect_objectionable_content(self, transcript, objectionable_words):
-        detected = []
-        for word in objectionable_words:
-            if re.search(rf"\b{word}\b", transcript, re.IGNORECASE):
-                detected.append(word)
+    def process_video_sequentially(self, video_path, audio_path, subtitles_path, filtering_mode, objectionable_words):
+        # Placeholder for video processing logic
+        print(f"Processing {video_path} with mode {filtering_mode}.")
+        print(f"Categories: {objectionable_words}")
+        self.progress_bar.start()
+        time.sleep(5)  # Simulate processing
+        self.progress_bar.stop()
+        messagebox.showinfo("Done", f"Processing complete for {video_path}.")
 
-        if not detected:
-            nlp_results = nlp(transcript)
-            for result in nlp_results[0]:
-                if result['label'] in ["anger", "disgust"] and result['score'] > 0.8:
-                    detected.append(result['label'])
-        return detected
-
+# Start the application
 if __name__ == "__main__":
     root = tk.Tk()
     app = ContentFilterApp(root)

@@ -10,9 +10,21 @@ import os
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import json
-from pytube import YouTube, Playlist
-from streamlink import Streamlink
-import pyautogui
+
+try:
+    from pytube import YouTube, Playlist
+except ImportError:
+    raise ImportError("The 'pytube' library is required. Install it using `pip install pytube`.")
+
+try:
+    from streamlink import Streamlink
+except ImportError:
+    raise ImportError("The 'streamlink' library is required. Install it using `pip install streamlink`.")
+
+try:
+    import pyautogui
+except ImportError:
+    raise ImportError("The 'pyautogui' library is required. Install it using `pip install pyautogui`.")
 
 # Pre-Trained Models for Video Classification
 model = keras.applications.MobileNetV2(weights="imagenet")
@@ -29,6 +41,9 @@ CATEGORY_FILTERS = {
 }
 
 PREFERENCES_FILE = "user_preferences.json"
+
+# Force TensorFlow to use CPU only
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 class ContentFilterApp:
     def __init__(self, root):
@@ -190,35 +205,4 @@ class ContentFilterApp:
 
     def process_live_stream(self):
         stream_url = filedialog.askstring("Enter Stream URL", "Stream URL:")
-        if not stream_url:
-            messagebox.showerror("Error", "Please enter a valid stream URL.")
-            return
-
-        try:
-            session = Streamlink()
-            streams = session.streams(stream_url)
-            best_stream = streams.get("best")
-            if not best_stream:
-                messagebox.showerror("Error", "No valid streams found.")
-                return
-
-            # Add logic to process the stream here
-            print(f"Streaming from {stream_url}")
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to process stream: {e}")
-
-    def process_video_sequentially(self, video_path, audio_path, subtitles_path, filtering_mode, objectionable_words):
-        # Placeholder for video processing logic
-        print(f"Processing {video_path} with mode {filtering_mode}.")
-        print(f"Categories: {objectionable_words}")
-        self.progress_bar.start()
-        time.sleep(5)  # Simulate processing
-        self.progress_bar.stop()
-        messagebox.showinfo("Done", f"Processing complete for {video_path}.")
-
-# Start the application
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = ContentFilterApp(root)
-    root.mainloop()
-
+        if not stream_url

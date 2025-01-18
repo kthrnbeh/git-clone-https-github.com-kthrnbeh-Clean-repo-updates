@@ -205,4 +205,15 @@ class ContentFilterApp:
 
     def process_live_stream(self):
         stream_url = filedialog.askstring("Enter Stream URL", "Stream URL:")
-        if not stream_url
+        if not stream_url:
+            messagebox.showerror("Error", "Please enter a valid stream URL.")
+            return
+
+        # Placeholder for live stream processing logic
+        print(f"Processing live stream from URL: {stream_url}")
+        messagebox.showinfo("Info", "Live stream processing is currently under development.")
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = ContentFilterApp(root)
+    root.mainloop()

@@ -5,6 +5,8 @@ import speech_recognition as sr
 from transformers import pipeline
 import re
 import time
+import wave
+import os
 
 # Pre-Trained Models for Video Classification
 model = keras.applications.MobileNetV2(weights="imagenet")
@@ -14,6 +16,11 @@ nlp = pipeline("text-classification", model="bhadresh-savani/bert-base-uncased-e
 
 # Define Default Objectionable Words or Phrases
 DEFAULT_OBJECTIONABLE_WORDS = ["swearword1", "swearword2", "violent phrase", "suggestive phrase"]
+CATEGORY_FILTERS = {
+    "Profanity": ["swearword1", "swearword2", "f-word", "s-word"],
+    "Violence": ["fight", "kill", "gun"],
+    "Sexual Content": ["nude", "sex", "explicit"]
+}
 
 def get_user_preferences():
     """Allow users to define their preferences for filtering."""
@@ -26,14 +33,27 @@ def get_user_preferences():
     print("   c. Log Only (Log content but take no action)")
     mode = input("Select mode (a/b/c): ").strip().lower()
 
-    print("\n2. Add Custom Objectionable Words (comma-separated):")
+    print("\n2. Select Categories to Filter:")
+    for i, category in enumerate(CATEGORY_FILTERS.keys(), 1):
+        print(f"   {i}. {category}")
+    selected_categories = input("Enter category numbers separated by commas (e.g., 1,2): ").strip()
+
+    selected_words = []
+    try:
+        selected_indices = [int(x.strip()) - 1 for x in selected_categories.split(",")]
+        for idx in selected_indices:
+            category = list(CATEGORY_FILTERS.keys())[idx]
+            selected_words.extend(CATEGORY_FILTERS[category])
+    except (ValueError, IndexError):
+        print("Invalid selection. Using default filters.")
+        selected_words = DEFAULT_OBJECTIONABLE_WORDS
+
+    print("\n3. Add Custom Objectionable Words (comma-separated, optional):")
     custom_words = input("Enter words (leave blank for default): ").strip()
 
     # Validate and store user preferences
     filtering_mode = mode if mode in ['a', 'b', 'c'] else 'a'
-    objectionable_words = (
-        DEFAULT_OBJECTIONABLE_WORDS + [word.strip() for word in custom_words.split(',')] if custom_words else DEFAULT_OBJECTIONABLE_WORDS
-    )
+    objectionable_words = selected_words + ([word.strip() for word in custom_words.split(',')] if custom_words else [])
 
     return {
         "mode": filtering_mode,
@@ -63,10 +83,16 @@ def classify_frame(frame):
 
 def transcribe_audio(audio_file):
     recognizer = sr.Recognizer()
-    with sr.AudioFile(audio_file) as source:
-        audio = recognizer.record(source)
     try:
+        with sr.AudioFile(audio_file) as source:
+            audio = recognizer.record(source)
         return recognizer.recognize_google(audio)
+    except FileNotFoundError:
+        print(f"Audio file not found: {audio_file}")
+        return ""
+    except wave.Error:
+        print(f"Invalid audio file format: {audio_file}")
+        return ""
     except sr.UnknownValueError:
         return ""
     except sr.RequestError as e:
@@ -102,9 +128,12 @@ def process_video_sequentially(video_path, audio_path, subtitles_path):
     transcript = transcribe_audio(audio_path)
     audio_detections = detect_objectionable_content(transcript)
 
-    with open(subtitles_path, "r") as subtitle_file:
-        subtitles = subtitle_file.read()
-        subtitle_detections = detect_objectionable_content(subtitles)
+    if os.path.exists(subtitles_path):
+        with open(subtitles_path, "r") as subtitle_file:
+            subtitles = subtitle_file.read()
+            subtitle_detections = detect_objectionable_content(subtitles)
+    else:
+        subtitle_detections = []
 
     print("Audio Detections:", audio_detections)
     print("Subtitle Detections:", subtitle_detections)
@@ -143,6 +172,29 @@ def process_video_sequentially(video_path, audio_path, subtitles_path):
 
     end_time = time.time()
     print(f"Processing complete in {end_time - start_time:.2f} seconds.")
+
+# Create a Sample Audio File
+if not os.path.exists("input_audio.wav"):
+    import wave
+    import struct
+
+    # Generate a dummy .wav file
+    sample_rate = 44100.0  # Hertz
+    duration = 2.0  # seconds
+    frequency = 440.0  # Hertz
+
+    n_samples = int(sample_rate * duration)
+    wav_file = wave.open("input_audio.wav", "w")
+    wav_file.setnchannels(1)  # Mono
+    wav_file.setsampwidth(2)  # 16 bits
+    wav_file.setframerate(int(sample_rate))
+
+    for i in range(n_samples):
+        value = int(32767.0 * np.sin(2.0 * np.pi * frequency * i / sample_rate))
+        data = struct.pack('<h', value)
+        wav_file.writeframesraw(data)
+
+    wav_file.close()
 
 # Example Usage
 video_path = "input_video.mp4"

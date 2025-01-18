@@ -10,6 +10,7 @@ import os
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import json
+import argparse
 
 try:
     from pytube import YouTube, Playlist
@@ -44,6 +45,26 @@ PREFERENCES_FILE = "user_preferences.json"
 
 # Force TensorFlow to use CPU only
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
+def cli_mode():
+    parser = argparse.ArgumentParser(description="Content Filtering Application (CLI Mode)")
+    parser.add_argument("--video", help="Path to the video file")
+    parser.add_argument("--audio", help="Path to the audio file", required=False)
+    parser.add_argument("--subtitles", help="Path to the subtitles file", required=False)
+    parser.add_argument("--youtube", help="YouTube URL to download and process", required=False)
+    parser.add_argument("--categories", help="Comma-separated categories to filter", required=False)
+    parser.add_argument("--mode", help="Filtering mode: skip/mute/log", default="log")
+
+    args = parser.parse_args()
+
+    if args.youtube:
+        print("Downloading YouTube content...")
+        # Add YouTube download logic here
+    elif args.video:
+        print(f"Processing video: {args.video}")
+        # Add local file processing logic here
+    else:
+        print("No valid input provided. Use --help for usage details.")
 
 class ContentFilterApp:
     def __init__(self, root):
@@ -163,14 +184,4 @@ class ContentFilterApp:
             self.filter_mode.set(preferences.get("filter_mode", "a"))
             for cat, value in preferences.get("categories", {}).items():
                 if cat in self.category_vars:
-                    self.category_vars[cat].set(value)
-
-    def start_filtering(self):
-        source_type = self.source_type.get()
-
-        if source_type == "Local File":
-            self.process_local_file()
-        elif source_type == "YouTube":
-            self.download_youtube_content()
-        elif source_type == "DVD":
-            self.process_dvd()
+                    self.category_vars

@@ -7,4 +7,4 @@ transformers
 pytube
 pyautogui
 streamlink
-tkinter
+mouseinfo

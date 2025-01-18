@@ -191,4 +191,4 @@ class ContentFilterApp:
         out.release()
 
         end_time = time.time()
-        messagebox.showinfo("Success",
+        messagebox.showinfo("Success"),

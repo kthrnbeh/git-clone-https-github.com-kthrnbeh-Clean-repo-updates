@@ -2,7 +2,8 @@ import cv2
 from tensorflow import keras
 import numpy as np
 import speech_recognition as sr
-from transformers import pipeline
+from transformers import pipelinepip install -r requirements.txt
+
 import re
 import time
 import wave

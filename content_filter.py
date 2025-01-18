@@ -15,7 +15,7 @@ import json
 model = keras.applications.MobileNetV2(weights="imagenet")
 
 # NLP Model for Objectionable Language Detection
-nlp = pipeline("text-classification", model="bhadresh-savani/bert-base-uncased-emotion", return_all_scores=True)
+nlp = pipeline("text-classification", model="bhadresh-savani/bert-base-uncased-emotion", top_k=None)
 
 # Define Default Objectionable Words or Phrases
 DEFAULT_OBJECTIONABLE_WORDS = ["swearword1", "swearword2", "violent phrase", "suggestive phrase"]
@@ -191,4 +191,39 @@ class ContentFilterApp:
         out.release()
 
         end_time = time.time()
-        messagebox.showinfo("Success"),
+        messagebox.showinfo("Success", f"Processing complete in {end_time - start_time:.2f} seconds.")
+
+    def classify_frame(self, frame):
+        frame = cv2.resize(frame, (224, 224))
+        frame = keras.applications.mobilenet_v2.preprocess_input(frame)
+        processed_frame = np.expand_dims(frame, axis=0)
+        predictions = model.predict(processed_frame, verbose=0)
+        return keras.applications.mobilenet_v2.decode_predictions(predictions, top=3)
+
+    def transcribe_audio(self, audio_file):
+        recognizer = sr.Recognizer()
+        try:
+            with sr.AudioFile(audio_file) as source:
+                audio = recognizer.record(source)
+            return recognizer.recognize_google(audio)
+        except Exception as e:
+            print(f"Error transcribing audio: {e}")
+            return ""
+
+    def detect_objectionable_content(self, transcript, objectionable_words):
+        detected = []
+        for word in objectionable_words:
+            if re.search(rf"\b{word}\b", transcript, re.IGNORECASE):
+                detected.append(word)
+
+        if not detected:
+            nlp_results = nlp(transcript)
+            for result in nlp_results[0]:
+                if result['label'] in ["anger", "disgust"] and result['score'] > 0.8:
+                    detected.append(result['label'])
+        return detected
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = ContentFilterApp(root)
+    root.mainloop()

@@ -1,5 +1,5 @@
 import cv2
-import tf_keras as keras
+from tensorflow import keras
 import numpy as np
 import speech_recognition as sr
 from transformers import pipeline
@@ -7,6 +7,9 @@ import re
 import time
 import wave
 import os
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+import json
 
 # Pre-Trained Models for Video Classification
 model = keras.applications.MobileNetV2(weights="imagenet")
@@ -22,182 +25,204 @@ CATEGORY_FILTERS = {
     "Sexual Content": ["nude", "sex", "explicit"]
 }
 
-def get_user_preferences():
-    """Allow users to define their preferences for filtering."""
-    print("Welcome to the Content Filtering System Configuration.")
-    print("Choose your preferred filtering options:")
+PREFERENCES_FILE = "user_preferences.json"
 
-    print("1. Filtering Modes:")
-    print("   a. Skip (Fast-forward objectionable content)")
-    print("   b. Mute (Mute objectionable audio)")
-    print("   c. Log Only (Log content but take no action)")
-    mode = input("Select mode (a/b/c): ").strip().lower()
+class ContentFilterApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Content Filtering System")
 
-    print("\n2. Select Categories to Filter:")
-    for i, category in enumerate(CATEGORY_FILTERS.keys(), 1):
-        print(f"   {i}. {category}")
-    selected_categories = input("Enter category numbers separated by commas (e.g., 1,2): ").strip()
+        # File Selection
+        self.video_path = tk.StringVar()
+        self.audio_path = tk.StringVar()
+        self.subtitles_path = tk.StringVar()
 
-    selected_words = []
-    try:
-        selected_indices = [int(x.strip()) - 1 for x in selected_categories.split(",")]
-        for idx in selected_indices:
-            category = list(CATEGORY_FILTERS.keys())[idx]
-            selected_words.extend(CATEGORY_FILTERS[category])
-    except (ValueError, IndexError):
-        print("Invalid selection. Using default filters.")
-        selected_words = DEFAULT_OBJECTIONABLE_WORDS
+        tk.Label(root, text="Select Video File:").grid(row=0, column=0, sticky="w")
+        tk.Entry(root, textvariable=self.video_path, width=50).grid(row=0, column=1)
+        tk.Button(root, text="Browse", command=self.browse_video).grid(row=0, column=2)
 
-    print("\n3. Add Custom Objectionable Words (comma-separated, optional):")
-    custom_words = input("Enter words (leave blank for default): ").strip()
+        tk.Label(root, text="Select Audio File:").grid(row=1, column=0, sticky="w")
+        tk.Entry(root, textvariable=self.audio_path, width=50).grid(row=1, column=1)
+        tk.Button(root, text="Browse", command=self.browse_audio).grid(row=1, column=2)
 
-    # Validate and store user preferences
-    filtering_mode = mode if mode in ['a', 'b', 'c'] else 'a'
-    objectionable_words = selected_words + ([word.strip() for word in custom_words.split(',')] if custom_words else [])
+        tk.Label(root, text="Select Subtitles File:").grid(row=2, column=0, sticky="w")
+        tk.Entry(root, textvariable=self.subtitles_path, width=50).grid(row=2, column=1)
+        tk.Button(root, text="Browse", command=self.browse_subtitles).grid(row=2, column=2)
 
-    return {
-        "mode": filtering_mode,
-        "words": objectionable_words
-    }
+        # Filtering Mode
+        tk.Label(root, text="Select Filtering Mode:").grid(row=3, column=0, sticky="w")
+        self.filter_mode = tk.StringVar(value="a")
+        tk.Radiobutton(root, text="Skip", variable=self.filter_mode, value="a").grid(row=3, column=1, sticky="w")
+        tk.Radiobutton(root, text="Mute", variable=self.filter_mode, value="b").grid(row=3, column=1)
+        tk.Radiobutton(root, text="Log Only", variable=self.filter_mode, value="c").grid(row=3, column=1, sticky="e")
 
-# Initialize user preferences
-USER_PREFERENCES = get_user_preferences()
-OBJECTIONABLE_WORDS = USER_PREFERENCES["words"]
+        # Category Selection
+        tk.Label(root, text="Select Categories to Filter:").grid(row=4, column=0, sticky="w")
+        self.category_vars = {category: tk.BooleanVar(value=False) for category in CATEGORY_FILTERS.keys()}
+        for i, category in enumerate(CATEGORY_FILTERS.keys()):
+            tk.Checkbutton(root, text=category, variable=self.category_vars[category]).grid(row=4 + i // 3, column=i % 3 + 1, sticky="w")
 
-# Frame Processing
+        # Progress Bar
+        tk.Label(root, text="Processing Progress:").grid(row=7, column=0, sticky="w")
+        self.progress_bar = ttk.Progressbar(root, orient="horizontal", length=400, mode="determinate")
+        self.progress_bar.grid(row=7, column=1, columnspan=2, pady=10)
 
-def preprocess_frame(frame):
-    """Preprocess the frame for AI model prediction."""
-    frame = cv2.resize(frame, (224, 224))
-    frame = keras.applications.mobilenet_v2.preprocess_input(frame)
-    return np.expand_dims(frame, axis=0)
+        # Save Preferences
+        tk.Button(root, text="Save Preferences", command=self.save_preferences).grid(row=8, column=0, pady=10)
 
-def classify_frame(frame):
-    """Classify a single frame and return detected labels."""
-    processed_frame = preprocess_frame(frame)
-    predictions = model.predict(processed_frame)
-    decoded_predictions = keras.applications.mobilenet_v2.decode_predictions(predictions, top=3)
-    return decoded_predictions
+        # Load Preferences
+        tk.Button(root, text="Load Preferences", command=self.load_preferences).grid(row=8, column=1, pady=10)
 
-# Audio and Subtitle Processing
+        # Process Button
+        tk.Button(root, text="Start Filtering", command=self.start_filtering).grid(row=8, column=2, pady=10)
 
-def transcribe_audio(audio_file):
-    recognizer = sr.Recognizer()
-    try:
-        with sr.AudioFile(audio_file) as source:
-            audio = recognizer.record(source)
-        return recognizer.recognize_google(audio)
-    except FileNotFoundError:
-        print(f"Audio file not found: {audio_file}")
-        return ""
-    except wave.Error:
-        print(f"Invalid audio file format: {audio_file}")
-        return ""
-    except sr.UnknownValueError:
-        return ""
-    except sr.RequestError as e:
-        print(f"Could not request results from Google Speech Recognition service; {e}")
-        return ""
+        self.load_preferences()
 
-def detect_objectionable_content(transcript):
-    detected = []
-    for word in OBJECTIONABLE_WORDS:
-        if re.search(rf"\b{word}\b", transcript, re.IGNORECASE):
-            detected.append(word)
+    def browse_video(self):
+        path = filedialog.askopenfilename(filetypes=[("Video Files", "*.mp4;*.avi;*.mkv")])
+        if path:
+            self.video_path.set(path)
 
-    if not detected:
-        nlp_results = nlp(transcript)
-        for result in nlp_results[0]:
-            if result['label'] in ["anger", "disgust"] and result['score'] > 0.8:
-                detected.append(result['label'])
-    return detected
+    def browse_audio(self):
+        path = filedialog.askopenfilename(filetypes=[("Audio Files", "*.wav")])
+        if path:
+            self.audio_path.set(path)
 
-# Sequential Processing
+    def browse_subtitles(self):
+        path = filedialog.askopenfilename(filetypes=[("Subtitle Files", "*.srt")])
+        if path:
+            self.subtitles_path.set(path)
 
-def process_video_sequentially(video_path, audio_path, subtitles_path):
-    """Process video, audio, and subtitles sequentially for simplicity."""
-    cap = cv2.VideoCapture(video_path)
-    fps = int(cap.get(cv2.CAP_PROP_FPS))
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    def save_preferences(self):
+        preferences = {
+            "filter_mode": self.filter_mode.get(),
+            "categories": {cat: var.get() for cat, var in self.category_vars.items()}
+        }
+        with open(PREFERENCES_FILE, "w") as f:
+            json.dump(preferences, f)
+        messagebox.showinfo("Success", "Preferences saved successfully.")
 
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    out = cv2.VideoWriter("sequential_output.mp4", fourcc, fps, (width, height))
+    def load_preferences(self):
+        if os.path.exists(PREFERENCES_FILE):
+            with open(PREFERENCES_FILE, "r") as f:
+                preferences = json.load(f)
+            self.filter_mode.set(preferences.get("filter_mode", "a"))
+            for cat, value in preferences.get("categories", {}).items():
+                if cat in self.category_vars:
+                    self.category_vars[cat].set(value)
 
-    # Process audio and subtitles
-    transcript = transcribe_audio(audio_path)
-    audio_detections = detect_objectionable_content(transcript)
+    def start_filtering(self):
+        video_path = self.video_path.get()
+        audio_path = self.audio_path.get()
+        subtitles_path = self.subtitles_path.get()
 
-    if os.path.exists(subtitles_path):
-        with open(subtitles_path, "r") as subtitle_file:
-            subtitles = subtitle_file.read()
-            subtitle_detections = detect_objectionable_content(subtitles)
-    else:
-        subtitle_detections = []
+        if not video_path or not audio_path or not subtitles_path:
+            messagebox.showerror("Error", "Please select all required files.")
+            return
 
-    print("Audio Detections:", audio_detections)
-    print("Subtitle Detections:", subtitle_detections)
+        # Get user-selected categories and filtering mode
+        selected_categories = [cat for cat, var in self.category_vars.items() if var.get()]
+        objectionable_words = []
+        for category in selected_categories:
+            objectionable_words.extend(CATEGORY_FILTERS[category])
 
-    start_time = time.time()
+        filtering_mode = self.filter_mode.get()
 
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
+        # Save preferences and process
+        self.process_video_sequentially(video_path, audio_path, subtitles_path, filtering_mode, objectionable_words)
 
-        # Classify frame
-        predictions = classify_frame(frame)
-        labels = [label[1] for label in predictions[0]]
+    def process_video_sequentially(self, video_path, audio_path, subtitles_path, filtering_mode, objectionable_words):
+        """Process video, audio, and subtitles sequentially."""
+        cap = cv2.VideoCapture(video_path)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        fps = int(cap.get(cv2.CAP_PROP_FPS))
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-        action_needed = False
-        if "nude" in labels or "violence" in labels or audio_detections or subtitle_detections:
-            action_needed = True
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        out = cv2.VideoWriter("sequential_output.mp4", fourcc, fps, (width, height))
 
-        if action_needed:
-            if USER_PREFERENCES["mode"] == 'a':
-                print("Skipping objectionable scene.")
-                continue
-            elif USER_PREFERENCES["mode"] == 'b':
-                print("Muting objectionable content.")
+        # Process audio and subtitles
+        transcript = self.transcribe_audio(audio_path)
+        audio_detections = self.detect_objectionable_content(transcript, objectionable_words)
 
-        out.write(frame)
-        cv2.imshow("Processed Video", frame)
+        if os.path.exists(subtitles_path):
+            with open(subtitles_path, "r") as subtitle_file:
+                subtitles = subtitle_file.read()
+                subtitle_detections = self.detect_objectionable_content(subtitles, objectionable_words)
+        else:
+            subtitle_detections = []
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+        print("Audio Detections:", audio_detections)
+        print("Subtitle Detections:", subtitle_detections)
 
-    cap.release()
-    out.release()
-    cv2.destroyAllWindows()
+        start_time = time.time()
+        current_frame = 0
 
-    end_time = time.time()
-    print(f"Processing complete in {end_time - start_time:.2f} seconds.")
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
 
-# Create a Sample Audio File
-if not os.path.exists("input_audio.wav"):
-    import wave
-    import struct
+            # Classify frame
+            predictions = self.classify_frame(frame)
+            labels = [label[1] for label in predictions[0]]
 
-    # Generate a dummy .wav file
-    sample_rate = 44100.0  # Hertz
-    duration = 2.0  # seconds
-    frequency = 440.0  # Hertz
+            action_needed = False
+            if "nude" in labels or "violence" in labels or audio_detections or subtitle_detections:
+                action_needed = True
 
-    n_samples = int(sample_rate * duration)
-    wav_file = wave.open("input_audio.wav", "w")
-    wav_file.setnchannels(1)  # Mono
-    wav_file.setsampwidth(2)  # 16 bits
-    wav_file.setframerate(int(sample_rate))
+            if action_needed:
+                if filtering_mode == 'a':
+                    print("Skipping objectionable scene.")
+                    continue
+                elif filtering_mode == 'b':
+                    print("Muting objectionable content.")
 
-    for i in range(n_samples):
-        value = int(32767.0 * np.sin(2.0 * np.pi * frequency * i / sample_rate))
-        data = struct.pack('<h', value)
-        wav_file.writeframesraw(data)
+            out.write(frame)
 
-    wav_file.close()
+            # Update progress bar
+            current_frame += 1
+            progress = (current_frame / total_frames) * 100
+            self.progress_bar['value'] = progress
+            self.root.update_idletasks()
 
-# Example Usage
-video_path = "input_video.mp4"
-audio_path = "input_audio.wav"
-subtitles_path = "input_subtitles.srt"
-process_video_sequentially(video_path, audio_path, subtitles_path)
+        cap.release()
+        out.release()
+
+        end_time = time.time()
+        messagebox.showinfo("Success", f"Processing complete in {end_time - start_time:.2f} seconds.")
+
+    def classify_frame(self, frame):
+        frame = cv2.resize(frame, (224, 224))
+        frame = keras.applications.mobilenet_v2.preprocess_input(frame)
+        processed_frame = np.expand_dims(frame, axis=0)
+        predictions = model.predict(processed_frame)
+        return keras.applications.mobilenet_v2.decode_predictions(predictions, top=3)
+
+    def transcribe_audio(self, audio_file):
+        recognizer = sr.Recognizer()
+        try:
+            with sr.AudioFile(audio_file) as source:
+                audio = recognizer.record(source)
+            return recognizer.recognize_google(audio)
+        except Exception as e:
+            print(f"Error transcribing audio: {e}")
+            return ""
+
+    def detect_objectionable_content(self, transcript, objectionable_words):
+        detected = []
+        for word in objectionable_words:
+            if re.search(rf"\b{word}\b", transcript, re.IGNORECASE):
+                detected.append(word)
+
+        if not detected:
+            nlp_results = nlp(transcript)
+            for result in nlp_results[0]:
+                if result['label'] in ["anger", "disgust"] and result['score'] > 0.8:
+                    detected.append(result['label'])
+        return detected
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = ContentFilter

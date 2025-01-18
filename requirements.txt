@@ -1,5 +1,10 @@
 tensorflow
+keras
 numpy
 opencv-python
-SpeechRecognition
+speechrecognition
 transformers
+pytube
+pyautogui
+streamlink
+tkinter

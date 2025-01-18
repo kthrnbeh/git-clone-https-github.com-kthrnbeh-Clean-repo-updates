@@ -27,6 +27,12 @@ try:
 except ImportError:
     print("The 'pyautogui' library is required. Please install it using `pip install pyautogui`.")
 
+# Import MouseInfoWindow
+try:
+    from mouseinfo import MouseInfoWindow
+except ImportError:
+    print("The 'mouseinfo' library or file is required. Please ensure it is in the same directory or installed.")
+
 # Pre-Trained Models for Video Classification
 model = keras.applications.MobileNetV2(weights="imagenet")
 
@@ -54,8 +60,13 @@ def cli_mode():
     parser.add_argument("--youtube", help="YouTube URL to download and process", required=False)
     parser.add_argument("--categories", help="Comma-separated categories to filter", required=False)
     parser.add_argument("--mode", help="Filtering mode: skip/mute/log", default="log")
+    parser.add_argument("--mouseinfo", action="store_true", help="Launch Mouse Info Tool")
 
     args = parser.parse_args()
+
+    if args.mouseinfo:
+        MouseInfoWindow()
+        return
 
     if args.youtube:
         print("Downloading YouTube content...")
@@ -126,6 +137,9 @@ class ContentFilterApp:
         # Process Button
         tk.Button(root, text="Start Filtering", command=self.start_filtering).grid(row=10, column=2, pady=10)
 
+        # Mouse Info Tool Button
+        tk.Button(root, text="Mouse Info Tool", command=self.launch_mouseinfo).grid(row=11, column=0, pady=10)
+
         self.load_preferences()
 
     def browse_video(self):
@@ -185,6 +199,12 @@ class ContentFilterApp:
             for cat, value in preferences.get("categories", {}).items():
                 if cat in self.category_vars:
                     self.category_vars[cat].set(value)
+
+    def launch_mouseinfo(self):
+        try:
+            MouseInfoWindow()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to launch Mouse Info Tool: {e}")
 
 def main():
     if os.environ.get("DISPLAY"):

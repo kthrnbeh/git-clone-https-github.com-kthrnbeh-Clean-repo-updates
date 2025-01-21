@@ -1,66 +1,153 @@
-import cv2
-from tensorflow import keras
-import numpy as np
-import speech_recognition as sr
-from transformers import pipeline
-import re
-import time
-import wave
+import cv2  # For Computer Vision
+import tensorflow as tf  # For AI Models
+from transformers import pipeline  # For NLP
+import speech_recognition as sr  # For real-time audio transcription
+import numpy as np  # For array manipulation
+from flask import Flask, request, jsonify  # For Web API
 import os
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-import json
 import argparse
+import json
 
-# Optional imports with error handling
-try:
-    from pytube import YouTube, Playlist
-except ImportError:
-    print("The 'pytube' library is required. Please install it using `pip install pytube`.")
+# Flask app for backend
+app = Flask(__name__)
 
-try:
-    from streamlink import Streamlink
-except ImportError:
-    print("The 'streamlink' library is required. Please install it using `pip install streamlink`.")
+# ==================================
+# AI Modules
+# ==================================
 
-try:
-    import pyautogui
-except ImportError:
-    print("The 'pyautogui' library is required. Please install it using `pip install pyautogui`.")
+def detect_objectionable_content(frame):
+    """
+    Detect objectionable content in a video frame using a pre-trained model.
+    :param frame: Single frame from the video stream.
+    :return: True if objectionable content is detected, False otherwise.
+    """
+    # Placeholder for actual model prediction
+    objectionable = False
+    # Example logic to check for content (replace with actual model processing)
+    # processed_frame = preprocess_frame(frame)
+    # objectionable = model.predict(processed_frame) > THRESHOLD
+    return objectionable
 
-# Import MouseInfoWindow with error handling
-try:
-    from mouseinfo import MouseInfoWindow
-except ImportError:
-    print("The 'mouseinfo' library is required. Please ensure it is installed.")
+def transcribe_and_analyze_audio(audio):
+    """
+    Transcribe audio and analyze for objectionable language.
+    :param audio: Audio clip or stream.
+    :return: True if objectionable language is detected, False otherwise.
+    """
+    recognizer = sr.Recognizer()
+    objectionable = False
+    try:
+        transcription = recognizer.recognize_google(audio)
+        nlp_model = pipeline("text-classification", model="distilbert-base-uncased")
+        analysis = nlp_model(transcription)
+        # Example: Check for categories like 'offensive', 'profanity', etc.
+        objectionable = any(item['label'] in ['HATE', 'PROFANITY'] for item in analysis)
+    except sr.UnknownValueError:
+        pass
+    return objectionable
 
-# Pre-Trained Models for Video Classification
-model = keras.applications.MobileNetV2(weights="imagenet")
+def apply_filters(frame, audio, preferences):
+    """
+    Apply filters to video frames and audio based on user preferences.
+    :param frame: Video frame to analyze and modify.
+    :param audio: Audio segment to analyze and modify.
+    :param preferences: User preferences for filtering.
+    :return: Processed frame and audio.
+    """
+    # Video filtering
+    if preferences.get('blur') and detect_objectionable_content(frame):
+        frame = cv2.GaussianBlur(frame, (15, 15), 0)
 
-# NLP Model for Objectionable Language Detection
-nlp = pipeline("text-classification", model="bhadresh-savani/bert-base-uncased-emotion", top_k=None)
+    # Audio filtering
+    if preferences.get('mute') and transcribe_and_analyze_audio(audio):
+        audio = None  # Muted
 
-# Default Objectionable Words or Phrases
-DEFAULT_OBJECTIONABLE_WORDS = ["swearword1", "swearword2", "violent phrase", "suggestive phrase"]
-CATEGORY_FILTERS = {
-    "Profanity": ["swearword1", "swearword2", "f-word", "s-word"],
-    "Violence": ["fight", "kill", "gun"],
-    "Sexual Content": ["nude", "sex", "explicit"],
-}
+    return frame, audio
 
-PREFERENCES_FILE = "user_preferences.json"
+# ==================================
+# Real-Time Filtering Logic
+# ==================================
 
-# Force TensorFlow to use CPU only
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+def process_video_stream(video_path, preferences):
+    """
+    Process video stream for real-time content filtering.
+    :param video_path: Path to the video or stream URL.
+    :param preferences: User preferences for filtering.
+    """
+    cap = cv2.VideoCapture(video_path)
 
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        # Simulate audio input (placeholder for actual audio handling)
+        audio = None
+
+        # Apply filters based on preferences
+        frame, audio = apply_filters(frame, audio, preferences)
+
+        # Display the processed frame
+        cv2.imshow('Filtered Video', frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+# ==================================
+# Web API Endpoints
+# ==================================
+
+@app.route('/set_preferences', methods=['POST'])
+def set_preferences():
+    """
+    Endpoint to set user preferences.
+    :return: Confirmation of preferences saved.
+    """
+    data = request.json
+    # Save preferences securely (e.g., encrypted database)
+    return jsonify({"message": "Preferences saved successfully!", "preferences": data})
+
+@app.route('/process_video', methods=['POST'])
+def process_video():
+    """
+    Endpoint to process video for filtering.
+    :return: Stream processed video (placeholder).
+    """
+    video_path = request.json.get('video_path')
+    preferences = request.json.get('preferences', {})
+    process_video_stream(video_path, preferences)
+    return jsonify({"message": "Video processing started."})
+
+# ==================================
 # CLI Mode Implementation
+# ==================================
+
 def cli_mode():
     parser = argparse.ArgumentParser(description="Content Filtering Application (CLI Mode)")
     parser.add_argument("--video", help="Path to the video file")
-    parser.add_argument("--audio", help="Path to the audio file", required=False)
-    parser.add_argument("--subtitles", help="Path to the subtitles file", required=False)
-    parser.add_argument("--youtube", help="YouTube URL to download and process", required=False)
-    parser.add_argument("--categories", help="Comma-separated categories to filter", required=False)
-    parser.add_argument("--mode", help="Filtering mode: skip/mute/log", default="log")
-    parser.add_argument("--mouseinfo", action="store_true", help="Launch Mouse Info Too
+    parser.add_argument("--preferences", help="Path to JSON file with preferences", required=False)
+    parser.add_argument("--mouseinfo", action="store_true", help="Launch Mouse Info Tool")
+    args = parser.parse_args()
+
+    video_path = args.video
+    preferences = {}
+
+    if args.preferences:
+        with open(args.preferences, 'r') as f:
+            preferences = json.load(f)
+
+    process_video_stream(video_path, preferences)
+
+# ==================================
+# Main Entry
+# ==================================
+
+if __name__ == '__main__':
+    import sys
+    if len(sys.argv) > 1:
+        cli_mode()
+    else:
+        app.run(debug=True)
 

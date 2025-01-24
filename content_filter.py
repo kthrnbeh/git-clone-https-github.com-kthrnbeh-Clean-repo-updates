@@ -1,5 +1,9 @@
 import cv2  # For Computer Vision
-import tensorflow as tf  # For AI Models
+try:
+    import tensorflow as tf  # For AI Models
+except ImportError as e:
+    print("Error: TensorFlow could not be imported. Please ensure it is installed.")
+    raise e
 from transformers import pipeline  # For NLP
 import speech_recognition as sr  # For real-time audio transcription
 import numpy as np  # For array manipulation

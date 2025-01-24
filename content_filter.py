@@ -5,7 +5,6 @@ import speech_recognition as sr  # For real-time audio transcription
 import numpy as np  # For array manipulation
 from flask import Flask, request, jsonify  # For Web API
 import os
-import argparse
 import json
 
 # Flask app for backend
@@ -42,27 +41,24 @@ def transcribe_and_analyze_audio(audio):
         analysis = nlp_model(transcription)
         # Example: Check for categories like 'offensive', 'profanity', etc.
         objectionable = any(item['label'] in ['HATE', 'PROFANITY'] for item in analysis)
+    except sr.RequestError:
+        print("Error: Could not connect to speech recognition service")
     except sr.UnknownValueError:
-        pass
+        print("Error: Could not understand audio")
     return objectionable
 
-def apply_filters(frame, audio, preferences):
+def apply_filters(frame, preferences):
     """
-    Apply filters to video frames and audio based on user preferences.
+    Apply filters to video frames based on user preferences.
     :param frame: Video frame to analyze and modify.
-    :param audio: Audio segment to analyze and modify.
     :param preferences: User preferences for filtering.
-    :return: Processed frame and audio.
+    :return: Processed frame.
     """
     # Video filtering
     if preferences.get('blur') and detect_objectionable_content(frame):
         frame = cv2.GaussianBlur(frame, (15, 15), 0)
 
-    # Audio filtering
-    if preferences.get('mute') and transcribe_and_analyze_audio(audio):
-        audio = None  # Muted
-
-    return frame, audio
+    return frame
 
 # ==================================
 # Real-Time Filtering Logic
@@ -76,16 +72,17 @@ def process_video_stream(video_path, preferences):
     """
     cap = cv2.VideoCapture(video_path)
 
+    if not cap.isOpened():
+        print(f"Error: Unable to open video file {video_path}")
+        return
+
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
             break
 
-        # Simulate audio input (placeholder for actual audio handling)
-        audio = None
-
         # Apply filters based on preferences
-        frame, audio = apply_filters(frame, audio, preferences)
+        frame = apply_filters(frame, preferences)
 
         # Display the processed frame
         cv2.imshow('Filtered Video', frame)
@@ -106,8 +103,13 @@ def set_preferences():
     :return: Confirmation of preferences saved.
     """
     data = request.json
-    # Save preferences securely (e.g., encrypted database)
-    return jsonify({"message": "Preferences saved successfully!", "preferences": data})
+    preferences = data.get("preferences", {})
+
+    # Save preferences to a local file for persistence
+    with open('preferences.json', 'w') as f:
+        json.dump(preferences, f)
+
+    return jsonify({"message": "Preferences saved successfully!", "preferences": preferences})
 
 @app.route('/process_video', methods=['POST'])
 def process_video():
@@ -116,29 +118,19 @@ def process_video():
     :return: Stream processed video (placeholder).
     """
     video_path = request.json.get('video_path')
-    preferences = request.json.get('preferences', {})
+
+    # Load preferences from file
+    if os.path.exists('preferences.json'):
+        with open('preferences.json', 'r') as f:
+            preferences = json.load(f)
+    else:
+        return jsonify({"error": "Preferences not set. Please set preferences first."}), 400
+
+    if not os.path.exists(video_path):
+        return jsonify({"error": "Video file does not exist."}), 400
+
     process_video_stream(video_path, preferences)
     return jsonify({"message": "Video processing started."})
-
-# ==================================
-# CLI Mode Implementation
-# ==================================
-
-def cli_mode():
-    parser = argparse.ArgumentParser(description="Content Filtering Application (CLI Mode)")
-    parser.add_argument("--video", help="Path to the video file")
-    parser.add_argument("--preferences", help="Path to JSON file with preferences", required=False)
-    parser.add_argument("--mouseinfo", action="store_true", help="Launch Mouse Info Tool")
-    args = parser.parse_args()
-
-    video_path = args.video
-    preferences = {}
-
-    if args.preferences:
-        with open(args.preferences, 'r') as f:
-            preferences = json.load(f)
-
-    process_video_stream(video_path, preferences)
 
 # ==================================
 # Main Entry
@@ -147,7 +139,13 @@ def cli_mode():
 if __name__ == '__main__':
     import sys
     if len(sys.argv) > 1:
-        cli_mode()
+        video_path = sys.argv[1]
+        preferences = {}
+
+        if os.path.exists('preferences.json'):
+            with open('preferences.json', 'r') as f:
+                preferences = json.load(f)
+
+        process_video_stream(video_path, preferences)
     else:
         app.run(debug=True)
-

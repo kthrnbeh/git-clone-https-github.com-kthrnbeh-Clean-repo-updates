@@ -6,8 +6,12 @@ import numpy as np  # For array manipulation
 from flask import Flask, request, jsonify  # For Web API
 import os
 import json
+import logging  # For logging
 from moviepy.editor import VideoFileClip  # For audio extraction
 from pytube import YouTube  # For YouTube video downloading
+
+# Initialize logging
+logging.basicConfig(filename='filter.log', level=logging.INFO)
 
 # Flask app for backend
 app = Flask(__name__)
@@ -92,11 +96,13 @@ def apply_filters(frame, preferences, net, classes, cap, current_frame):
     # Video filtering
     if preferences.get('blur') and detect_objectionable_content_yolo(frame, net, classes):
         frame = cv2.GaussianBlur(frame, (15, 15), 0)
+        logging.info(f"Blurred frame at timestamp {current_frame / cap.get(cv2.CAP_PROP_FPS):.2f} seconds.")
 
     # Scene skipping
     if preferences.get('skip') and detect_objectionable_content_yolo(frame, net, classes):
         SKIP_FRAMES = 150  # Skip ahead 150 frames
         cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame + SKIP_FRAMES)
+        logging.info(f"Skipped frames at timestamp {current_frame / cap.get(cv2.CAP_PROP_FPS):.2f} seconds.")
 
     return frame
 

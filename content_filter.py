@@ -1,11 +1,11 @@
+import os
+import json
+import logging  # For logging
 import cv2  # For Computer Vision
 from transformers import pipeline  # For NLP
 import speech_recognition as sr  # For real-time audio transcription
 import numpy as np  # For array manipulation
 from flask import Flask, request, jsonify  # For Web API
-import os
-import json
-import logging  # For logging
 from moviepy.editor import VideoFileClip  # For audio extraction
 from pytube import YouTube  # For YouTube video downloading
 
@@ -30,7 +30,7 @@ def load_yolo_model():
     class_labels_path = "coco.names" # Path to class labels
 
     net = cv2.dnn.readNetFromDarknet(config_path, weights_path)
-    with open(class_labels_path, "r") as f:
+    with open(class_labels_path, "r", encoding="utf-8") as f:
         classes = [line.strip() for line in f.readlines()]
 
     return net, classes
@@ -96,12 +96,12 @@ def apply_filters(frame, preferences, net, classes, cap, current_frame):
     """
     if preferences.get('blur') and detect_objectionable_content_yolo(frame, net, classes):
         frame = cv2.GaussianBlur(frame, (15, 15), 0)
-        logging.info(f"Blurred frame at timestamp {current_frame / cap.get(cv2.CAP_PROP_FPS):.2f} seconds.")
+        logging.info("Blurred frame at timestamp %.2f seconds.", current_frame / cap.get(cv2.CAP_PROP_FPS))
 
     if preferences.get('skip') and detect_objectionable_content_yolo(frame, net, classes):
         skip_frames = 150
         cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame + skip_frames)
-        logging.info(f"Skipped frames at timestamp {current_frame / cap.get(cv2.CAP_PROP_FPS):.2f} seconds.")
+        logging.info("Skipped frames at timestamp %.2f seconds.", current_frame / cap.get(cv2.CAP_PROP_FPS))
 
     return frame
 
@@ -138,4 +138,3 @@ def extract_audio(video_path, audio_path="output_audio.wav"):
     clip.audio.write_audiofile(audio_path)
     print(f"Extracted audio to {audio_path}")
     return audio_path
-

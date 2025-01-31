@@ -138,3 +138,4 @@ def extract_audio(video_path, audio_path="output_audio.wav"):
     clip.audio.write_audiofile(audio_path)
     print(f"Extracted audio to {audio_path}")
     return audio_path
+

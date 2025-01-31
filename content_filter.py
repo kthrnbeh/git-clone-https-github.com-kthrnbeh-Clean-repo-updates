@@ -1,43 +1,54 @@
-import os
-import logging  # For logging
+"""
+Content Filtering Module
+This module contains functionalities for filtering objectionable content from videos using AI-based models,
+speech recognition, and NLP-based text classification.
+"""
 
+import os
+import logging  # For logging and debugging purposes
+
+# Attempt to import OpenCV for computer vision-related tasks
 try:
-    import cv2  # For Computer Vision
+    import cv2  # For Computer Vision (image and video processing)
 except ImportError as e:
     logging.error("Error: OpenCV is not installed. Please install it using 'pip install opencv-python'.")
     raise e
 
+# Attempt to import Transformers for NLP-based content classification
 try:
-    from transformers import pipeline  # For NLP
+    from transformers import pipeline  # For NLP-based text classification
 except ImportError as e:
     logging.error("Error: Transformers module is not installed. Please install it using 'pip install transformers'.")
     raise e
 
+# Attempt to import SpeechRecognition for real-time audio transcription
 try:
     import speech_recognition as sr  # For real-time audio transcription
 except ImportError as e:
     logging.error("Error: SpeechRecognition module is not installed. Please install it using 'pip install SpeechRecognition'.")
     raise e
 
-import numpy as np  # For array manipulation
-from flask import Flask  # For Web API
+import numpy as np  # For numerical computations and array manipulations
+from flask import Flask  # For setting up a web-based API
 
+# Attempt to import MoviePy for audio extraction from video files
 try:
-    from moviepy.editor import VideoFileClip  # For audio extraction
+    from moviepy.editor import VideoFileClip  # For extracting audio from video
 except ImportError as e:
     logging.error("Error: MoviePy module is not installed. Please install it using 'pip install moviepy'.")
     raise e
 
+# Attempt to import PyTube for downloading YouTube videos
 try:
-    from pytube import YouTube  # For YouTube video downloading
+    from pytube import YouTube  # For downloading videos from YouTube
 except ImportError as e:
     logging.error("Error: PyTube module is not installed. Please install it using 'pip install pytube'.")
     raise e
 
-# Initialize logging
+# Initialize logging to record events and errors
 logging.basicConfig(filename='filter.log', level=logging.INFO)
 
-# Flask app for backend
+# Flask application instance to create a web service
 app = Flask(__name__)
 
 # ==================================
@@ -45,14 +56,16 @@ app = Flask(__name__)
 # ==================================
 
 # Load YOLO model for objectionable content detection
+
 def load_yolo_model():
     """
-    Load the pre-trained YOLO model for object detection.
+    Load the pre-trained YOLO (You Only Look Once) model for object detection.
+    This model is used to detect explicit or inappropriate content in video frames.
     :return: Loaded YOLO model and class labels.
     """
-    weights_path = "yolov3.weights"  # Path to YOLO weights
-    config_path = "yolov3.cfg"       # Path to YOLO config
-    class_labels_path = "coco.names" # Path to class labels
+    weights_path = "yolov3.weights"  # Path to pre-trained YOLO weights
+    config_path = "yolov3.cfg"       # Path to YOLO configuration file
+    class_labels_path = "coco.names" # Path to class labels (list of detected objects)
 
     net = cv2.dnn.readNetFromDarknet(config_path, weights_path)
     with open(class_labels_path, "r", encoding="utf-8") as f:
@@ -61,9 +74,10 @@ def load_yolo_model():
     return net, classes
 
 # Detect objectionable content using YOLO
+
 def detect_objectionable_content_yolo(frame, net, classes):
     """
-    Detects objectionable content in a video frame using YOLO.
+    Detects objectionable content in a video frame using the YOLO deep learning model.
     :param frame: The video frame to analyze.
     :param net: The preloaded YOLO model.
     :param classes: Class labels used by YOLO.
@@ -80,14 +94,16 @@ def detect_objectionable_content_yolo(frame, net, classes):
             scores = detection[5:]
             class_id = np.argmax(scores)
             confidence = scores[class_id]
+            # Checking if detected object is explicit content
             if confidence > 0.5 and classes[class_id] in ["nude", "explicit"]:
                 return True
     return False
 
 # Transcribe and analyze audio for objectionable language
+
 def transcribe_and_analyze_audio(audio):
     """
-    Transcribes and analyzes audio for objectionable language.
+    Transcribes and analyzes audio for objectionable or offensive language.
     :param audio: Audio data to analyze.
     :return: True if objectionable content is detected, False otherwise.
     """
@@ -104,11 +120,12 @@ def transcribe_and_analyze_audio(audio):
     return False
 
 # Apply video filters
+
 def apply_filters(frame, preferences, net, classes, cap, current_frame):
     """
     Applies filters to a video frame based on user preferences.
     :param frame: The current video frame.
-    :param preferences: User-defined preferences.
+    :param preferences: User-defined preferences (e.g., blur, skip frames).
     :param net: Preloaded YOLO model.
     :param classes: Class labels.
     :param cap: Video capture object.
@@ -116,11 +133,11 @@ def apply_filters(frame, preferences, net, classes, cap, current_frame):
     :return: Processed video frame.
     """
     if preferences.get('blur') and detect_objectionable_content_yolo(frame, net, classes):
-        frame = cv2.GaussianBlur(frame, (15, 15), 0)
+        frame = cv2.GaussianBlur(frame, (15, 15), 0)  # Apply Gaussian blur to obscure content
         logging.info("Blurred frame at timestamp %.2f seconds.", current_frame / cap.get(cv2.CAP_PROP_FPS))
 
     if preferences.get('skip') and detect_objectionable_content_yolo(frame, net, classes):
-        skip_frames = 150
+        skip_frames = 150  # Number of frames to skip
         cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame + skip_frames)
         logging.info("Skipped frames at timestamp %.2f seconds.", current_frame / cap.get(cv2.CAP_PROP_FPS))
 
@@ -132,7 +149,7 @@ def apply_filters(frame, preferences, net, classes, cap, current_frame):
 
 def download_youtube_video(url, output_path="downloads"):
     """
-    Downloads a YouTube video.
+    Downloads a YouTube video using PyTube.
     :param url: YouTube video URL.
     :param output_path: Directory for saving the video.
     :return: Path to downloaded video.
@@ -149,7 +166,7 @@ def download_youtube_video(url, output_path="downloads"):
 
 def extract_audio(video_path, audio_path="output_audio.wav"):
     """
-    Extracts audio from a video file.
+    Extracts audio from a video file and saves it as a WAV file.
     :param video_path: Path to video file.
     :param audio_path: Output audio file path.
     """

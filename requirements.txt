@@ -8,3 +8,4 @@ streamlink
 mouseinfo
 flask
 moviepy
+torch

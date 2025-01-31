@@ -1,5 +1,4 @@
 import os
-import json
 import logging  # For logging
 
 try:
@@ -70,7 +69,6 @@ def detect_objectionable_content_yolo(frame, net, classes):
     :param classes: Class labels used by YOLO.
     :return: True if objectionable content is detected, False otherwise.
     """
-    height, width = frame.shape[:2]
     blob = cv2.dnn.blobFromImage(frame, 1 / 255.0, (416, 416), swapRB=True, crop=False)
     net.setInput(blob)
     layer_names = net.getLayerNames()

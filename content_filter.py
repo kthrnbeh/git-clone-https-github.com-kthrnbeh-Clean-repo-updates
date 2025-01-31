@@ -1,13 +1,39 @@
 import os
 import json
 import logging  # For logging
-import cv2  # For Computer Vision
-from transformers import pipeline  # For NLP
-import speech_recognition as sr  # For real-time audio transcription
+
+try:
+    import cv2  # For Computer Vision
+except ImportError as e:
+    print("Error: OpenCV is not installed. Please install it using 'pip install opencv-python'.")
+    raise e
+
+try:
+    from transformers import pipeline  # For NLP
+except ImportError as e:
+    print("Error: Transformers module is not installed. Please install it using 'pip install transformers'.")
+    raise e
+
+try:
+    import speech_recognition as sr  # For real-time audio transcription
+except ImportError as e:
+    print("Error: SpeechRecognition module is not installed. Please install it using 'pip install SpeechRecognition'.")
+    raise e
+
 import numpy as np  # For array manipulation
 from flask import Flask, request, jsonify  # For Web API
-from moviepy.editor import VideoFileClip  # For audio extraction
-from pytube import YouTube  # For YouTube video downloading
+
+try:
+    from moviepy.editor import VideoFileClip  # For audio extraction
+except ImportError as e:
+    print("Error: MoviePy module is not installed. Please install it using 'pip install moviepy'.")
+    raise e
+
+try:
+    from pytube import YouTube  # For YouTube video downloading
+except ImportError as e:
+    print("Error: PyTube module is not installed. Please install it using 'pip install pytube'.")
+    raise e
 
 # Initialize logging
 logging.basicConfig(filename='filter.log', level=logging.INFO)

@@ -1,5 +1,3 @@
-tensorflow
-keras
 numpy
 opencv-python
 speechrecognition
@@ -8,4 +6,5 @@ pytube
 pyautogui
 streamlink
 mouseinfo
-Flask
+flask
+moviepy

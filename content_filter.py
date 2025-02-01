@@ -9,7 +9,7 @@ import logging  # For logging and debugging purposes
 
 # Attempt to import OpenCV for real-time video processing
 try:
-    import cv2  # OpenCV for Computer Vision (image and video processing)  # noqa: E1101
+    import cv2  # OpenCV for Computer Vision (image and video processing)
 except ImportError as e:
     logging.error("Error: OpenCV is not installed. Please install it using 'pip install opencv-python'.")
     raise e
@@ -58,7 +58,7 @@ def load_youtube_video(url):
     stream = yt.streams.get_highest_resolution()
     video_path = "temp_video.mp4"
     stream.download(filename=video_path)
-    return cv2.VideoCapture(video_path), video_path  # noqa: E1101
+    return cv2.VideoCapture(video_path), video_path
 
 # Load YOLO model for real-time objectionable content detection
 
@@ -72,7 +72,7 @@ def load_yolo_model():
     config_path = "yolov3.cfg"       # Path to YOLO configuration file
     class_labels_path = "coco.names" # Path to class labels (list of detected objects)
 
-    net = cv2.dnn.readNetFromDarknet(config_path, weights_path)  # noqa: E1101
+    net = cv2.dnn.readNetFromDarknet(config_path, weights_path)
     with open(class_labels_path, "r", encoding="utf-8") as f:
         classes = [line.strip() for line in f.readlines()]
 
@@ -88,10 +88,10 @@ def detect_objectionable_content_yolo(frame, net, classes):
     :param classes: Class labels used by YOLO.
     :return: True if objectionable content is detected, False otherwise.
     """
-    blob = cv2.dnn.blobFromImage(frame, 1 / 255.0, (416, 416), swapRB=True, crop=False)  # noqa: E1101
+    blob = cv2.dnn.blobFromImage(frame, 1 / 255.0, (416, 416), swapRB=True, crop=False)
     net.setInput(blob)
     layer_names = net.getLayerNames()
-    output_layers = [layer_names[i[0] - 1] for i in net.getUnconnectedOutLayers()]  # noqa: E1101
+    output_layers = [layer_names[i[0] - 1] for i in net.getUnconnectedOutLayers()]
     detections = net.forward(output_layers)
 
     for output in detections:
@@ -131,11 +131,11 @@ def apply_filters(frame, preferences, net, classes, cap, current_frame):
     """
     if detect_objectionable_content_yolo(frame, net, classes):
         if preferences.get("blur"):
-            frame = cv2.GaussianBlur(frame, (15, 15), 0)  # noqa: E1101
+            frame = cv2.GaussianBlur(frame, (15, 15), 0)
         if preferences.get("mute"):
             pass  # Muting functionality can be implemented
         if preferences.get("fast_forward"):
-            cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame + 30)  # noqa: E1101
+            cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame + 30)
     return frame
 
 # Main Function to Process Videos

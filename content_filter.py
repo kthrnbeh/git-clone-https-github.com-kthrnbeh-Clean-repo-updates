@@ -53,7 +53,7 @@ def load_youtube_video(url):
     :return: VideoCapture object and the video path
     """
     yt = YouTube(url)
-    stream = yt.streams.filter(res="720p", file_extension="mp4").first()
+    stream = yt.streams.get_highest_resolution()
     video_path = "temp_video.mp4"
     stream.download(filename=video_path)
     return cv2.VideoCapture(video_path), video_path  # Returns the video capture and path
@@ -121,13 +121,26 @@ def transcribe_and_analyze_audio(audio):
         logging.error("Error: Could not understand audio")
     return False
 
+# Apply filters to the video
+
+def apply_filters(frame, preferences, net, classes, cap, current_frame):
+    """
+    Apply AI-based filtering to video frames.
+    """
+    if detect_objectionable_content_yolo(frame, net, classes):
+        if preferences.get("blur"):
+            frame = cv2.GaussianBlur(frame, (15, 15), 0)  # noqa: E1101
+        if preferences.get("mute"):
+            pass  # Muting functionality can be implemented
+        if preferences.get("fast_forward"):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame + 30)  # noqa: E1101
+    return frame
+
 # Main Function to Process Videos
 
 def process_video(video_url, preferences):
     """
     Processes a given YouTube video by applying AI-based filtering.
-    :param video_url: The YouTube video URL
-    :param preferences: User filtering preferences (mute, blur, fast-forward)
     """
     cap, video_path = load_youtube_video(video_url)
     net, classes = load_yolo_model()

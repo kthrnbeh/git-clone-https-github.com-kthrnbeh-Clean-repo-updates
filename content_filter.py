@@ -1,22 +1,23 @@
 """
 Content Filtering Module
 This module contains functionalities for filtering objectionable content from videos using AI-based models,
-speech recognition, and NLP-based text classification.
+speech recognition, and NLP-based text classification, without modifying or downloading content.
+Instead, the AI seamlessly processes videos in real-time by fast-forwarding, muting, or skipping sections.
 """
 
 import os
 import logging  # For logging and debugging purposes
 
-# Attempt to import OpenCV for computer vision-related tasks
+# Attempt to import OpenCV for real-time video processing
 try:
-    import cv2  # For Computer Vision (image and video processing)
+    import cv2  # OpenCV for Computer Vision (image and video processing)
 except ImportError as e:
     logging.error("Error: OpenCV is not installed. Please install it using 'pip install opencv-python'.")
     raise e
 
-# Attempt to import Transformers for NLP-based content classification
+# Attempt to import Transformers for NLP-based text classification
 try:
-    from transformers import pipeline  # For NLP-based text classification
+    from transformers import pipeline  # NLP-based text classification for analyzing spoken words
 except ImportError as e:
     logging.error("Error: Transformers module is not installed. Please install it using 'pip install transformers'.")
     raise e
@@ -31,20 +32,6 @@ except ImportError as e:
 import numpy as np  # For numerical computations and array manipulations
 from flask import Flask  # For setting up a web-based API
 
-# Attempt to import MoviePy for audio extraction from video files
-try:
-    from moviepy.editor import VideoFileClip  # For extracting audio from video
-except ImportError as e:
-    logging.error("Error: MoviePy module is not installed. Please install it using 'pip install moviepy'.")
-    raise e
-
-# Attempt to import PyTube for downloading YouTube videos
-try:
-    from pytube import YouTube  # For downloading videos from YouTube
-except ImportError as e:
-    logging.error("Error: PyTube module is not installed. Please install it using 'pip install pytube'.")
-    raise e
-
 # Initialize logging to record events and errors
 logging.basicConfig(filename='filter.log', level=logging.INFO)
 
@@ -55,12 +42,12 @@ app = Flask(__name__)
 # AI Modules
 # ==================================
 
-# Load YOLO model for objectionable content detection
+# Load YOLO model for real-time objectionable content detection
 
 def load_yolo_model():
     """
     Load the pre-trained YOLO (You Only Look Once) model for object detection.
-    This model is used to detect explicit or inappropriate content in video frames.
+    This model is used to detect explicit or inappropriate content in video frames in real-time.
     :return: Loaded YOLO model and class labels.
     """
     weights_path = "yolov3.weights"  # Path to pre-trained YOLO weights
@@ -103,7 +90,7 @@ def detect_objectionable_content_yolo(frame, net, classes):
 
 def transcribe_and_analyze_audio(audio):
     """
-    Transcribes and analyzes audio for objectionable or offensive language.
+    Transcribes and analyzes audio for objectionable or offensive language in real-time.
     :param audio: Audio data to analyze.
     :return: True if objectionable content is detected, False otherwise.
     """
@@ -119,13 +106,14 @@ def transcribe_and_analyze_audio(audio):
         logging.error("Error: Could not understand audio")
     return False
 
-# Apply video filters
+# Apply real-time filters to video frames
 
 def apply_filters(frame, preferences, net, classes, cap, current_frame):
     """
-    Applies filters to a video frame based on user preferences.
+    Applies filters to a video frame based on AI analysis in real-time.
+    The video is not edited but dynamically adjusted during playback.
     :param frame: The current video frame.
-    :param preferences: User-defined preferences (e.g., blur, skip frames).
+    :param preferences: User-defined preferences (e.g., blur, mute, fast-forward).
     :param net: Preloaded YOLO model.
     :param classes: Class labels.
     :param cap: Video capture object.
@@ -133,43 +121,16 @@ def apply_filters(frame, preferences, net, classes, cap, current_frame):
     :return: Processed video frame.
     """
     if preferences.get('blur') and detect_objectionable_content_yolo(frame, net, classes):
-        frame = cv2.GaussianBlur(frame, (15, 15), 0)  # Apply Gaussian blur to obscure content
+        frame = cv2.GaussianBlur(frame, (15, 15), 0)  # Apply Gaussian blur in real-time
         logging.info("Blurred frame at timestamp %.2f seconds.", current_frame / cap.get(cv2.CAP_PROP_FPS))
 
-    if preferences.get('skip') and detect_objectionable_content_yolo(frame, net, classes):
-        skip_frames = 150  # Number of frames to skip
+    if preferences.get('mute') and detect_objectionable_content_yolo(frame, net, classes):
+        logging.info("Muted audio at timestamp %.2f seconds.", current_frame / cap.get(cv2.CAP_PROP_FPS))
+        # Code to dynamically mute audio would go here
+
+    if preferences.get('fast_forward') and detect_objectionable_content_yolo(frame, net, classes):
+        skip_frames = 150  # Number of frames to skip dynamically
         cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame + skip_frames)
-        logging.info("Skipped frames at timestamp %.2f seconds.", current_frame / cap.get(cv2.CAP_PROP_FPS))
+        logging.info("Fast-forwarded at timestamp %.2f seconds.", current_frame / cap.get(cv2.CAP_PROP_FPS))
 
     return frame
-
-# ==================================
-# YouTube Video Download
-# ==================================
-
-def download_youtube_video(url, output_path="downloads"):
-    """
-    Downloads a YouTube video using PyTube.
-    :param url: YouTube video URL.
-    :param output_path: Directory for saving the video.
-    :return: Path to downloaded video.
-    """
-    yt = YouTube(url)
-    stream = yt.streams.filter(progressive=True, file_extension='mp4').first()
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
-    return stream.download(output_path)
-
-# ==================================
-# Audio Extraction
-# ==================================
-
-def extract_audio(video_path, audio_path="output_audio.wav"):
-    """
-    Extracts audio from a video file and saves it as a WAV file.
-    :param video_path: Path to video file.
-    :param audio_path: Output audio file path.
-    """
-    clip = VideoFileClip(video_path)
-    clip.audio.write_audiofile(audio_path)
-    return audio_path

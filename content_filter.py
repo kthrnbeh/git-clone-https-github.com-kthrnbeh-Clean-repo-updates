@@ -5,7 +5,6 @@ speech recognition, and NLP-based text classification, without modifying or down
 Instead, the AI seamlessly processes videos in real-time by fast-forwarding, muting, or skipping sections.
 """
 
-import os
 import logging  # For logging and debugging purposes
 
 # Attempt to import OpenCV for real-time video processing

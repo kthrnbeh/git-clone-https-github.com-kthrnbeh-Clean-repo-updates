@@ -30,6 +30,11 @@ except ImportError as e:
 
 import numpy as np  # For numerical computations and array manipulations
 from flask import Flask  # For setting up a web-based API
+try:
+    from pytube import YouTube  # For downloading YouTube videos
+except ImportError as e:
+    logging.error("Error: Pytube module is not installed. Please install it using 'pip install pytube'.")
+    raise e
 
 # Initialize logging to record events and errors
 logging.basicConfig(filename='filter.log', level=logging.INFO)
@@ -40,6 +45,18 @@ app = Flask(__name__)
 # ==================================
 # AI Modules
 # ==================================
+
+def load_youtube_video(url):
+    """
+    Downloads a YouTube video and loads it into OpenCV for processing.
+    :param url: YouTube video URL
+    :return: VideoCapture object and the video path
+    """
+    yt = YouTube(url)
+    stream = yt.streams.filter(res="720p", file_extension="mp4").first()
+    video_path = "temp_video.mp4"
+    stream.download(filename=video_path)
+    return cv2.VideoCapture(video_path), video_path  # Returns the video capture and path
 
 # Load YOLO model for real-time objectionable content detection
 
@@ -80,7 +97,6 @@ def detect_objectionable_content_yolo(frame, net, classes):
             scores = detection[5:]
             class_id = np.argmax(scores)
             confidence = scores[class_id]
-            # Checking if detected object is explicit content
             if confidence > 0.5 and classes[class_id] in ["nude", "explicit"]:
                 return True
     return False
@@ -105,34 +121,30 @@ def transcribe_and_analyze_audio(audio):
         logging.error("Error: Could not understand audio")
     return False
 
-# Apply real-time filters to video frames
+# Main Function to Process Videos
 
-def apply_filters(frame, preferences, net, classes, cap, current_frame):
+def process_video(video_url, preferences):
     """
-    Applies filters to a video frame based on AI analysis in real-time.
-    The video is not edited but dynamically adjusted during playback.
-    :param frame: The current video frame.
-    :param preferences: User-defined preferences (e.g., blur, mute, fast-forward).
-    :param net: Preloaded YOLO model.
-    :param classes: Class labels.
-    :param cap: Video capture object.
-    :param current_frame: The current frame number.
-    :return: Processed video frame.
+    Processes a given YouTube video by applying AI-based filtering.
+    :param video_url: The YouTube video URL
+    :param preferences: User filtering preferences (mute, blur, fast-forward)
     """
-    if preferences.get('blur') and detect_objectionable_content_yolo(frame, net, classes):
-        frame = cv2.GaussianBlur(frame, (15, 15), 0)  # noqa: E1101
-        logging.info("Blurred frame at timestamp %.2f seconds.",
-                     current_frame / cap.get(cv2.CAP_PROP_FPS))  # noqa: E1101
+    cap, video_path = load_youtube_video(video_url)
+    net, classes = load_yolo_model()
+    current_frame = 0
 
-    if preferences.get('mute') and detect_objectionable_content_yolo(frame, net, classes):
-        logging.info("Muted audio at timestamp %.2f seconds.",
-                     current_frame / cap.get(cv2.CAP_PROP_FPS))  # noqa: E1101
-        # Code to dynamically mute audio would go here
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+        processed_frame = apply_filters(frame, preferences, net, classes, cap, current_frame)
+        current_frame += 1
 
-    if preferences.get('fast_forward') and detect_objectionable_content_yolo(frame, net, classes):
-        skip_frames = 150  # Number of frames to skip dynamically
-        cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame + skip_frames)  # noqa: E1101
-        logging.info("Fast-forwarded at timestamp %.2f seconds.",
-                     current_frame / cap.get(cv2.CAP_PROP_FPS))  # noqa: E1101
+    cap.release()
+    import os
+    os.remove(video_path)  # Cleanup temporary file
 
-    return frame
+# Example Usage
+video_url = "https://www.youtube.com/watch?v=pw2meh9nDac"
+preferences = {"blur": True, "mute": True, "fast_forward": True}
+process_video(video_url, preferences)

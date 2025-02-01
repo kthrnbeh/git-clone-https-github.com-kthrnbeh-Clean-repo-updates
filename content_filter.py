@@ -50,15 +50,16 @@ app = Flask(__name__)
 
 def load_youtube_video(url):
     """
-    Downloads a YouTube video and loads it into OpenCV for processing.
+    Loads a YouTube video for processing using OpenCV without downloading it.
     :param url: YouTube video URL
-    :return: VideoCapture object and the video path
+    :return: VideoCapture object
     """
-    yt = YouTube(url)
-    stream = yt.streams.get_highest_resolution()
-    video_path = "temp_video.mp4"
-    stream.download(filename=video_path)
-    return cv2.VideoCapture(video_path), video_path
+    import pafy
+    import youtube_dl
+    
+    video = pafy.new(url)
+    best = video.getbest(preftype="mp4")
+    return cv2.VideoCapture(best.url)
 
 # Load YOLO model for real-time objectionable content detection
 
@@ -144,7 +145,7 @@ def process_video(video_url, preferences):
     """
     Processes a given YouTube video by applying AI-based filtering.
     """
-    cap, video_path = load_youtube_video(video_url)
+    cap = load_youtube_video(video_url)
     net, classes = load_yolo_model()
     current_frame = 0
 
@@ -156,7 +157,6 @@ def process_video(video_url, preferences):
         current_frame += 1
 
     cap.release()
-    os.remove(video_path)  # Cleanup temporary file
 
 # Example Usage
 VIDEO_URL = "https://www.youtube.com/watch?v=pw2meh9nDac"

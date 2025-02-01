@@ -33,16 +33,9 @@ from flask import Flask  # For setting up a web-based API
 import os  # For handling file operations
 
 try:
-    from pytube import YouTube  # For downloading YouTube videos
-except ImportError as e:
-    logging.error("Error: Pytube module is not installed. Please install it using 'pip install pytube'.")
-    raise e
-
-try:
-    import pafy  # For handling YouTube video streams
     import streamlink  # For fetching video streams without downloading
 except ImportError as e:
-    logging.error("Error: Required modules for streaming YouTube videos are missing. Install them using 'pip install pafy streamlink'.")
+    logging.error("Error: Streamlink module is not installed. Please install it using 'pip install streamlink'.")
     raise e
 
 # Initialize logging to record events and errors
@@ -97,7 +90,7 @@ def detect_objectionable_content_yolo(frame, net, classes):
     blob = cv2.dnn.blobFromImage(frame, 1 / 255.0, (416, 416), swapRB=True, crop=False)
     net.setInput(blob)
     layer_names = net.getLayerNames()
-    output_layers = [layer_names[i[0] - 1] for i in net.getUnconnectedOutLayers()]
+    output_layers = [layer_names[i - 1] for i in net.getUnconnectedOutLayers().flatten()]
     detections = net.forward(output_layers)
 
     for output in detections:

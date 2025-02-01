@@ -38,6 +38,13 @@ except ImportError as e:
     logging.error("Error: Pytube module is not installed. Please install it using 'pip install pytube'.")
     raise e
 
+try:
+    import pafy  # For handling YouTube video streams
+    import streamlink  # For fetching video streams without downloading
+except ImportError as e:
+    logging.error("Error: Required modules for streaming YouTube videos are missing. Install them using 'pip install pafy streamlink'.")
+    raise e
+
 # Initialize logging to record events and errors
 logging.basicConfig(filename='filter.log', level=logging.INFO)
 
@@ -54,12 +61,10 @@ def load_youtube_video(url):
     :param url: YouTube video URL
     :return: VideoCapture object
     """
-    import pafy
-    import youtube_dl
-    
-    video = pafy.new(url)
-    best = video.getbest(preftype="mp4")
-    return cv2.VideoCapture(best.url)
+    streams = streamlink.streams(url)
+    if 'best' in streams:
+        return cv2.VideoCapture(streams['best'].url)
+    raise ValueError("No valid stream found for the provided URL.")
 
 # Load YOLO model for real-time objectionable content detection
 

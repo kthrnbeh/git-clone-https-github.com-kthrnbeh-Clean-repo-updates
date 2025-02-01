@@ -30,6 +30,8 @@ except ImportError as e:
 
 import numpy as np  # For numerical computations and array manipulations
 from flask import Flask  # For setting up a web-based API
+import os  # For handling file operations
+
 try:
     from pytube import YouTube  # For downloading YouTube videos
 except ImportError as e:
@@ -56,7 +58,7 @@ def load_youtube_video(url):
     stream = yt.streams.get_highest_resolution()
     video_path = "temp_video.mp4"
     stream.download(filename=video_path)
-    return cv2.VideoCapture(video_path), video_path  # Returns the video capture and path
+    return cv2.VideoCapture(video_path), video_path  # noqa: E1101
 
 # Load YOLO model for real-time objectionable content detection
 
@@ -154,10 +156,9 @@ def process_video(video_url, preferences):
         current_frame += 1
 
     cap.release()
-    import os
     os.remove(video_path)  # Cleanup temporary file
 
 # Example Usage
-video_url = "https://www.youtube.com/watch?v=pw2meh9nDac"
-preferences = {"blur": True, "mute": True, "fast_forward": True}
-process_video(video_url, preferences)
+VIDEO_URL = "https://www.youtube.com/watch?v=pw2meh9nDac"
+PREFERENCES = {"blur": True, "mute": True, "fast_forward": True}
+process_video(VIDEO_URL, PREFERENCES)

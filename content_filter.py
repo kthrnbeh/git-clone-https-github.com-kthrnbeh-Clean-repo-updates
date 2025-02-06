@@ -33,9 +33,9 @@ from flask import Flask  # For setting up a web-based API
 import os  # For handling file operations
 
 try:
-    import streamlink  # For fetching video streams without downloading
+    import yt_dlp  # For fetching YouTube video URLs dynamically
 except ImportError as e:
-    logging.error("Error: Streamlink module is not installed. Please install it using 'pip install streamlink'.")
+    logging.error("Error: yt-dlp module is not installed. Please install it using 'pip install yt-dlp'.")
     raise e
 
 # Initialize logging to record events and errors
@@ -54,9 +54,18 @@ def load_youtube_video(url):
     :param url: YouTube video URL
     :return: VideoCapture object
     """
-    streams = streamlink.streams(url)
-    if 'best' in streams:
-        return cv2.VideoCapture(streams['best'].url)
+    ydl_opts = {
+        'format': 'best',
+        'quiet': True,
+        'noplaylist': True,
+    }
+    
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info_dict = ydl.extract_info(url, download=False)
+        video_url = info_dict.get('url', None)
+    
+    if video_url:
+        return cv2.VideoCapture(video_url)
     raise ValueError("No valid stream found for the provided URL.")
 
 # Load YOLO model for real-time objectionable content detection
